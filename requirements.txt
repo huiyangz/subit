@@ -1,7 +1,8 @@
 flask==2.3.3
+flask-cors==4.0.0
 python-dotenv==1.0.0
 ffmpeg-python==0.2.0
-mlx-audio-plus==0.1.8
+mlx-audio-plus>=0.1.0
 requests>=2.31.0
 pydantic>=2.5.0
 modelscope>=1.14.0
