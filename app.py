@@ -25,6 +25,10 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 model_manager = ModelManager()
 task_manager = TaskManager()
 
+# 添加锁以防止并行处理
+import threading
+process_lock = threading.Lock()
+
 # 在启动服务器时就加载模型
 print("服务启动时加载模型...")
 try:
@@ -59,9 +63,9 @@ def upload_video():
     video_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(video_path)
 
-    # 启动转写任务
+    # 启动转写任务（使用锁防止并行处理）
     threading.Thread(
-        target=_process_video,
+        target=_process_video_safe,
         args=(video_path, task_id),
         daemon=True
     ).start()
@@ -71,20 +75,38 @@ def upload_video():
         'task_id': task_id
     })
 
+def _process_video_safe(video_path: str, task_id: str):
+    """安全处理视频转写的后台任务，使用锁防止并行处理"""
+    with process_lock:
+        # 首先检查是否存在正在处理的任务
+        if hasattr(task_manager, 'is_processing') and task_manager.is_processing:
+            print("已有任务在处理中，新任务将替代旧任务")
+            task_manager.clear()
+
+        try:
+            # 设置处理中标记
+            task_manager.is_processing = True
+            _process_video(video_path, task_id)
+        finally:
+            # 清除处理中标记
+            task_manager.is_processing = False
+
 def _process_video(video_path: str, task_id: str):
     """处理视频转写的后台任务"""
-    task_manager.start_new_task(task_id)
+    # 提取音频
+    audio_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{task_id}.wav")
+    # 分片处理
+    segments_dir = os.path.join(app.config['UPLOAD_FOLDER'], task_id)
+
+    # 初始化新任务，保存文件路径以用于后续清理
+    task_manager.start_new_task(task_id, video_path, audio_path, segments_dir)
 
     # 如果模型未加载，尝试加载
     if not model_manager.model:
         model_manager.download_and_load_model()
 
     # 提取音频
-    audio_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{task_id}.wav")
     AudioUtils.extract_audio(video_path, audio_path)
-
-    # 分片处理
-    segments_dir = os.path.join(app.config['UPLOAD_FOLDER'], task_id)
     segments = AudioUtils.split_audio(audio_path, segments_dir)
 
     print(f"音频分片完成，共 {len(segments)} 个片段，每个大约 10 秒")

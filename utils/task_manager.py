@@ -18,11 +18,18 @@ class TaskManager:
         self.transcripts: Dict[int, str] = {}
         self.audio_segments: List[str] = []
         self.processing_complete: bool = False
+        self.is_processing: bool = False
+        self.video_path: Optional[str] = None
+        self.audio_path: Optional[str] = None
+        self.segments_dir: Optional[str] = None
 
-    def start_new_task(self, task_id: str) -> None:
+    def start_new_task(self, task_id: str, video_path: str = None, audio_path: str = None, segments_dir: str = None) -> None:
         """开始新任务，清理之前的任务"""
         self._reset()
         self.current_task_id = task_id
+        self.video_path = video_path
+        self.audio_path = audio_path
+        self.segments_dir = segments_dir
 
     def save_transcript(self, segment_id: int, text: str) -> None:
         """保存分片转录结果"""
@@ -45,5 +52,20 @@ class TaskManager:
         self.processing_complete = True
 
     def clear(self) -> None:
-        """清理所有任务数据"""
+        """清理所有任务数据和临时文件"""
+        # 删除临时文件
+        try:
+            if self.audio_path and os.path.exists(self.audio_path):
+                os.remove(self.audio_path)
+                print(f"已删除临时音频文件: {self.audio_path}")
+            if self.segments_dir and os.path.exists(self.segments_dir):
+                shutil.rmtree(self.segments_dir)
+                print(f"已删除临时片段目录: {self.segments_dir}")
+            if self.video_path and os.path.exists(self.video_path):
+                os.remove(self.video_path)
+                print(f"已删除临时视频文件: {self.video_path}")
+        except Exception as e:
+            print(f"清理临时文件时出错: {e}")
+
+        # 重置状态
         self._reset()

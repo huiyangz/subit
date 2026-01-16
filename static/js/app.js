@@ -8,11 +8,29 @@ document.addEventListener('DOMContentLoaded', () => {
     let transcripts = {};
     let isFirstTranscriptReceived = false;
     let updateInterval = null; // 用于定期更新转录结果
+    let videoLoaded = false; // 视频是否已加载
+
+    // 初始化时禁用播放按钮
+    playPauseBtn.disabled = true;
 
     // 上传视频
     videoUpload.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (file) {
+            // 重置状态
+            isFirstTranscriptReceived = false;
+            videoLoaded = false;
+            transcripts = {};
+            transcriptContainer.innerHTML = '正在处理视频...';
+
+            // 立即禁用播放按钮
+            playPauseBtn.disabled = true;
+
+            // 清除之前的视频源
+            videoSource.src = '';
+            videoPlayer.load();
+
+            // 上传并处理新视频
             await uploadFile(file);
         }
     });
@@ -38,6 +56,21 @@ document.addEventListener('DOMContentLoaded', () => {
         updateTranscript(currentTime);
     });
 
+    // 视频播放完成事件
+    videoPlayer.addEventListener('ended', () => {
+        playPauseBtn.innerHTML = '▶ 播放';
+        stopUpdatingTranscripts();
+    });
+
+    // 视频加载完成事件
+    videoPlayer.addEventListener('loadeddata', () => {
+        videoLoaded = true;
+        // 如果已有转录结果，启用播放按钮
+        if (isFirstTranscriptReceived) {
+            playPauseBtn.disabled = false;
+        }
+    });
+
     async function uploadFile(file) {
         // 清除当前会话
         await clearTask();
@@ -53,18 +86,24 @@ document.addEventListener('DOMContentLoaded', () => {
         const result = await response.json();
         if (result.error) {
             alert(result.error);
+            transcriptContainer.innerHTML = '上传出错';
             return;
         }
 
         // 等待第一个转录结果
+        transcriptContainer.innerHTML = '正在等待转录结果...';
+        isFirstTranscriptReceived = false; // 确保重置
         while (!isFirstTranscriptReceived) {
             await checkTranscriptProgress();
+            await new Promise(resolve => setTimeout(resolve, 1000)); // 减少请求频率
         }
 
         // 加载视频到播放器
         const videoURL = URL.createObjectURL(file);
         videoSource.src = videoURL;
         videoPlayer.load();
+
+        transcriptContainer.innerHTML = ''; // 清空提示
     }
 
     function startUpdatingTranscripts() {
@@ -108,6 +147,12 @@ document.addEventListener('DOMContentLoaded', () => {
             isFirstTranscriptReceived = true;
             console.log('格式化后的转写结果:', transcripts);
             console.log('已准备好的片段:', Object.keys(transcripts));
+
+            // 如果视频已经加载，启用播放按钮
+            if (videoLoaded) {
+                playPauseBtn.disabled = false;
+                console.log('启用播放按钮');
+            }
         } else {
             console.log('没有新的转录结果');
         }
@@ -138,11 +183,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function clearTask() {
+        console.log('开始清理所有状态');
         await fetch('/api/clear', { method: 'POST' });
         isFirstTranscriptReceived = false;
         transcripts = {};
         transcriptContainer.innerHTML = '';
+        videoLoaded = false;
         stopUpdatingTranscripts(); // 停止检查
+        playPauseBtn.disabled = true; // 重新禁用播放按钮
+        playPauseBtn.innerHTML = '▶ 播放'; // 重置为播放状态
+        console.log('所有状态已重置');
     }
 
     // 页面刷新前清理

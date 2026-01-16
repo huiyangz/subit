@@ -37,7 +37,7 @@ body, html {
 .upload-btn-label {
     display: inline-block;
     padding: 10px 20px;
-    background-color: rgba(255, 0, 0, 0.8);
+    background-color: rgba(76, 175, 80, 0.8);
     color: white;
     border: none;
     border-radius: 20px;
@@ -47,13 +47,13 @@ body, html {
 }
 
 .upload-btn-wrapper:hover .upload-btn-label {
-    background-color: rgba(255, 0, 0, 1);
+    background-color: rgba(76, 175, 80, 1);
     transform: scale(1.05);
 }
 
 .play-pause-btn {
     position: absolute;
-    bottom: 30px;
+    bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
     padding: 12px 24px;
@@ -61,15 +61,21 @@ body, html {
     border: none;
     border-radius: 20px;
     cursor: pointer;
-    background-color: rgba(255, 0, 0, 0.8);
+    background-color: rgba(33, 150, 243, 0.8);
     color: white;
     transition: all 0.3s ease;
     z-index: 2;
 }
 
-.play-pause-btn:hover {
-    background-color: rgba(255, 0, 0, 1);
+.play-pause-btn:hover:not(:disabled) {
+    background-color: rgba(33, 150, 243, 1);
     transform: translateX(-50%) scale(1.05);
+}
+
+.play-pause-btn:disabled {
+    background-color: rgba(158, 158, 158, 0.8);
+    cursor: not-allowed;
+    transform: translateX(-50%);
 }
 
 .transcript-container {
