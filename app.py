@@ -38,8 +38,9 @@ def upload_video():
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
 
-    # 检查文件类型
-    if not file.filename.endswith(('.mp4', '.mov', '.avi', '.mkv')):
+    # 检查文件类型（不区分大小写）
+    filename_lower = file.filename.lower()
+    if not filename_lower.endswith(('.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv')):
         return jsonify({'error': 'Unsupported file format'}), 400
 
     # 清理之前的任务

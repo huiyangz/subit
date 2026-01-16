@@ -77,7 +77,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateTranscript(currentTime) {
         const segmentId = Math.floor(currentTime / 10);
         if (transcripts[segmentId]) {
-            transcriptContainer.innerHTML = transcripts[segmentId];
+            // 确保正确显示文本，防止[object Object]显示
+            const transcriptText = typeof transcripts[segmentId] === 'string'
+                ? transcripts[segmentId]
+                : JSON.stringify(transcripts[segmentId]);
+            transcriptContainer.innerHTML = transcriptText;
         }
     }
 

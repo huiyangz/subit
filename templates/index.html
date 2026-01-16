@@ -12,7 +12,11 @@
             <source id="videoSource" src="" type="video/mp4">
         </video>
 
-        <input type="file" id="videoUpload" accept="video/*" class="upload-btn">
+        <div class="upload-btn-wrapper">
+            <input type="file" id="videoUpload" accept="video/*" class="upload-btn">
+            <label for="videoUpload" class="upload-btn-label">📁 上传视频</label>
+        </div>
+
         <button id="playPauseBtn" class="play-pause-btn">▶ 播放</button>
 
         <div id="transcriptContainer" class="transcript-container"></div>
