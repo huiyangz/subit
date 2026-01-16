@@ -37,7 +37,7 @@ class ModelManager:
 
         try:
             # 执行转写
-            result = self.model.transcribe(audio_path)
+            result = self.model.generate(audio_path)
             return result['text'] if isinstance(result, dict) else result
         except Exception as e:
             print(f"转写错误: {e}")
