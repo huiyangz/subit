@@ -1,5 +1,6 @@
 import os
 import uuid
+import shutil
 from flask import Flask, render_template, request, jsonify, abort
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -60,18 +61,13 @@ def upload_video():
     # 先清理uploads目录中所有临时文件
     try:
         upload_dir = app.config['UPLOAD_FOLDER']
-        if os.path.exists(upload_dir):
-            for filename in os.listdir(upload_dir):
-                file_path = os.path.join(upload_dir, filename)
-                try:
-                    if os.path.isfile(file_path):
-                        os.remove(file_path)
-                        print(f"已删除旧的临时文件: {file_path}")
-                    elif os.path.isdir(file_path):
-                        shutil.rmtree(file_path)
-                        print(f"已删除旧的临时目录: {file_path}")
-                except Exception as e:
-                    print(f"删除文件时出错 {file_path}: {e}")
+        for entry in os.listdir(upload_dir):
+            entry_path = os.path.join(upload_dir, entry)
+            if os.path.isfile(entry_path):
+                os.remove(entry_path)
+            elif os.path.isdir(entry_path):
+                shutil.rmtree(entry_path)
+        print(f"已清理目录: {upload_dir}")
     except Exception as e:
         print(f"清理uploads目录时出错: {e}")
 
@@ -181,6 +177,28 @@ def clear_task():
         print(f"清理缓存时出错: {e}")
 
     return jsonify({'message': 'Task cleared and all cache removed'})
+
+@app.route('/api/clear-cache', methods=['POST'])
+def clear_cache():
+    """清理uploads目录中除当前视频之外的其他缓存文件"""
+    print("收到清理其他缓存的请求")
+    try:
+        if task_manager.current_task_id and task_manager.video_path:
+            upload_dir = app.config['UPLOAD_FOLDER']
+            current_filename = os.path.basename(task_manager.video_path)
+            for entry in os.listdir(upload_dir):
+                entry_path = os.path.join(upload_dir, entry)
+                if entry != current_filename and entry != task_manager.current_task_id:
+                    if os.path.isfile(entry_path):
+                        os.remove(entry_path)
+                        print(f"已清理缓存文件: {entry_path}")
+                    elif os.path.isdir(entry_path):
+                        shutil.rmtree(entry_path)
+                        print(f"已清理缓存目录: {entry_path}")
+            print("已清理其他缓存数据")
+    except Exception as e:
+        print(f"清理缓存时出错: {e}")
+    return jsonify({'message': 'Cache cleared'})
 
 @app.route('/api/status')
 def get_status():

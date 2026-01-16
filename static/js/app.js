@@ -40,8 +40,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (videoPlayer.paused) {
             videoPlayer.play();
             playPauseBtn.innerHTML = '⏸ 暂停';
-            // 开始播放后，定期检查新的转录结果
+            // 开始播放后，定期检查新的转录结果并清理其他缓存
             startUpdatingTranscripts();
+            // 清理其他缓存数据
+            fetch('/api/clear-cache', { method: 'POST' });
         } else {
             videoPlayer.pause();
             playPauseBtn.innerHTML = '▶ 播放';
