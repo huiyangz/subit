@@ -2,7 +2,7 @@ import os
 import shutil
 from modelscope import snapshot_download
 from dotenv import load_dotenv
-from mlx_audio_plus import ASRModel
+from mlx_audio.stt.models.funasr import Model
 
 
 class ModelManager:
@@ -27,7 +27,7 @@ class ModelManager:
 
             # 加载 MLX 模型
             print("开始加载模型...")
-            self.model = ASRModel.from_pretrained(model_dir)
+            self.model = Model.from_pretrained(model_dir)
             print("模型加载完成")
 
     def transcribe_audio(self, audio_path: str) -> str:
