@@ -78,38 +78,57 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     async function uploadFile(file) {
+        // 先检查文件大小（500MB）
+        const maxSize = 500 * 1024 * 1024; // 500MB
+        if (file.size > maxSize) {
+            alert(`文件太大，请上传小于500MB的视频。当前文件大小：${(file.size / (1024*1024)).toFixed(2)}MB`);
+            transcriptContainer.innerHTML = '上传出错：文件太大';
+            // 重置文件输入，允许用户重新选择文件
+            videoUpload.value = '';
+            return;
+        }
+
         // 清除当前会话
         await clearTask();
 
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await fetch('/upload', {
-            method: 'POST',
-            body: formData
-        });
+        try {
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData
+            });
 
-        const result = await response.json();
-        if (result.error) {
-            alert(result.error);
+            const result = await response.json();
+            if (!response.ok || result.error) {
+                const errorMessage = result.error || `上传失败，HTTP错误：${response.status}`;
+                alert(errorMessage);
+                transcriptContainer.innerHTML = '上传出错';
+                videoUpload.value = ''; // 重置文件输入
+                return;
+            }
+
+            // 等待第一个转录结果
+            transcriptContainer.innerHTML = '正在等待转录结果...';
+            isFirstTranscriptReceived = false; // 确保重置
+            while (!isFirstTranscriptReceived) {
+                await checkTranscriptProgress();
+                await new Promise(resolve => setTimeout(resolve, 1000)); // 减少请求频率
+            }
+
+            // 加载视频到播放器
+            const videoURL = URL.createObjectURL(file);
+            videoSource.src = videoURL;
+            videoPlayer.load();
+
+            transcriptContainer.innerHTML = ''; // 清空提示
+        } catch (error) {
+            console.error('上传过程中发生错误:', error);
+            alert('上传失败，请重试');
             transcriptContainer.innerHTML = '上传出错';
-            return;
+            videoUpload.value = ''; // 重置文件输入
         }
-
-        // 等待第一个转录结果
-        transcriptContainer.innerHTML = '正在等待转录结果...';
-        isFirstTranscriptReceived = false; // 确保重置
-        while (!isFirstTranscriptReceived) {
-            await checkTranscriptProgress();
-            await new Promise(resolve => setTimeout(resolve, 1000)); // 减少请求频率
-        }
-
-        // 加载视频到播放器
-        const videoURL = URL.createObjectURL(file);
-        videoSource.src = videoURL;
-        videoPlayer.load();
-
-        transcriptContainer.innerHTML = ''; // 清空提示
     }
 
     function startUpdatingTranscripts() {

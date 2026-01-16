@@ -41,6 +41,10 @@ except Exception as e:
 def index():
     return render_template('index.html')
 
+@app.errorhandler(413)
+def too_large(e):
+    return jsonify({'error': 'File is too large (max 500MB)'}), 413
+
 @app.route('/upload', methods=['POST'])
 def upload_video():
     if 'file' not in request.files:
@@ -54,6 +58,16 @@ def upload_video():
     filename_lower = file.filename.lower()
     if not filename_lower.endswith(('.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv')):
         return jsonify({'error': 'Unsupported file format'}), 400
+
+    # 检查文件大小
+    file.seek(0, os.SEEK_END)
+    file_length = file.tell()
+    file.seek(0)
+
+    if file_length > app.config['MAX_CONTENT_LENGTH']:
+        return jsonify({
+            'error': f'File is too large. Maximum allowed size is 500MB, file is {file_length / (1024*1024):.2f}MB'
+        }), 413
 
     # 彻底清理之前的所有任务数据
     print("收到新的视频上传请求，开始彻底清理所有缓存数据")
