@@ -54,7 +54,28 @@ def upload_video():
     if not filename_lower.endswith(('.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv')):
         return jsonify({'error': 'Unsupported file format'}), 400
 
-    # 清理之前的任务
+    # 彻底清理之前的所有任务数据
+    print("收到新的视频上传请求，开始彻底清理所有缓存数据")
+
+    # 先清理uploads目录中所有临时文件
+    try:
+        upload_dir = app.config['UPLOAD_FOLDER']
+        if os.path.exists(upload_dir):
+            for filename in os.listdir(upload_dir):
+                file_path = os.path.join(upload_dir, filename)
+                try:
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+                        print(f"已删除旧的临时文件: {file_path}")
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                        print(f"已删除旧的临时目录: {file_path}")
+                except Exception as e:
+                    print(f"删除文件时出错 {file_path}: {e}")
+    except Exception as e:
+        print(f"清理uploads目录时出错: {e}")
+
+    # 然后清理任务管理器状态
     task_manager.clear()
 
     # 保存文件
@@ -138,8 +159,28 @@ def get_segment_transcript(segment_id):
 
 @app.route('/api/clear', methods=['POST'])
 def clear_task():
+    print("收到清理请求，开始彻底清理所有任务数据和缓存")
+
+    # 清理任务数据
     task_manager.clear()
-    return jsonify({'message': 'Task cleared'})
+
+    # 清理uploads目录中所有临时文件
+    try:
+        upload_dir = app.config['UPLOAD_FOLDER']
+        if os.path.exists(upload_dir):
+            for filename in os.listdir(upload_dir):
+                file_path = os.path.join(upload_dir, filename)
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                    print(f"已删除临时文件: {file_path}")
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+                    print(f"已删除临时目录: {file_path}")
+        print("所有缓存数据已清理完毕")
+    except Exception as e:
+        print(f"清理缓存时出错: {e}")
+
+    return jsonify({'message': 'Task cleared and all cache removed'})
 
 @app.route('/api/status')
 def get_status():

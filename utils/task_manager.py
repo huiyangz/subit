@@ -53,19 +53,9 @@ class TaskManager:
 
     def clear(self) -> None:
         """清理所有任务数据和临时文件"""
-        # 删除临时文件
-        try:
-            if self.audio_path and os.path.exists(self.audio_path):
-                os.remove(self.audio_path)
-                print(f"已删除临时音频文件: {self.audio_path}")
-            if self.segments_dir and os.path.exists(self.segments_dir):
-                shutil.rmtree(self.segments_dir)
-                print(f"已删除临时片段目录: {self.segments_dir}")
-            if self.video_path and os.path.exists(self.video_path):
-                os.remove(self.video_path)
-                print(f"已删除临时视频文件: {self.video_path}")
-        except Exception as e:
-            print(f"清理临时文件时出错: {e}")
+        print("开始清理任务管理器中的数据")
 
-        # 重置状态
+        # 重置状态（不删除文件，文件在路由中已处理）
         self._reset()
+
+        print("任务管理器已重置")

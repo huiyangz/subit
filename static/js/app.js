@@ -60,6 +60,10 @@ document.addEventListener('DOMContentLoaded', () => {
     videoPlayer.addEventListener('ended', () => {
         playPauseBtn.innerHTML = '▶ 播放';
         stopUpdatingTranscripts();
+
+        // 播放完成后可以选择自动清理缓存，根据实际需求决定
+        // 这里暂时不自动清理，让用户可以随时再次播放
+        // 如果需要自动清理，可以在这里调用 clearTask()
     });
 
     // 视频加载完成事件
