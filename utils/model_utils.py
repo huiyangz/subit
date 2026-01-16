@@ -38,7 +38,19 @@ class ModelManager:
         try:
             # 执行转写
             result = self.model.generate(audio_path)
-            return result['text'] if isinstance(result, dict) else result
+
+            # 处理 STTOutput 对象
+            if hasattr(result, 'text'):
+                return result.text
+            # 尝试多种可能的返回格式
+            elif isinstance(result, dict):
+                if 'text' in result:
+                    return result['text']
+                elif 'transcription' in result:
+                    return result['transcription']
+            elif isinstance(result, str):
+                return result
+            return str(result)
         except Exception as e:
             print(f"转写错误: {e}")
             return ""

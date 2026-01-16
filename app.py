@@ -25,6 +25,13 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 model_manager = ModelManager()
 task_manager = TaskManager()
 
+# 在启动服务器时就加载模型
+print("服务启动时加载模型...")
+try:
+    model_manager.download_and_load_model()
+except Exception as e:
+    print(f"模型加载失败，将在首次使用时尝试加载: {e}")
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -68,8 +75,9 @@ def _process_video(video_path: str, task_id: str):
     """处理视频转写的后台任务"""
     task_manager.start_new_task(task_id)
 
-    # 下载并加载模型
-    model_manager.download_and_load_model()
+    # 如果模型未加载，尝试加载
+    if not model_manager.model:
+        model_manager.download_and_load_model()
 
     # 提取音频
     audio_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{task_id}.wav")
@@ -79,17 +87,25 @@ def _process_video(video_path: str, task_id: str):
     segments_dir = os.path.join(app.config['UPLOAD_FOLDER'], task_id)
     segments = AudioUtils.split_audio(audio_path, segments_dir)
 
+    print(f"音频分片完成，共 {len(segments)} 个片段，每个大约 10 秒")
+
     # 转录每个分片
     for i, segment_path in enumerate(segments):
+        print(f"正在转写分片 {i}")
         transcript = model_manager.transcribe_audio(segment_path)
+        print(f"分片 {i} 转写完成，结果长度: {len(transcript)}")
         task_manager.save_transcript(i, transcript)
+        print(f"已保存分片 {i} 的转写结果")
 
+    print(f"总共有 {len(task_manager.transcripts)} 个分片的转写结果")
     task_manager.mark_processing_complete()
+    print("转写全部完成")
 
 @app.route('/api/transcript')
 def get_transcript():
-    transcript = task_manager.get_transcript()
-    return jsonify(transcript)
+    transcripts = task_manager.get_transcript()
+    print(f"API 请求: 共 {len(transcripts)} 个分片结果")
+    return jsonify(transcripts)
 
 @app.route('/api/transcript/<int:segment_id>')
 def get_segment_transcript(segment_id):

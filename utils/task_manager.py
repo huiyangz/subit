@@ -31,7 +31,11 @@ class TaskManager:
     def get_transcript(self, segment_id: Optional[int] = None) -> Dict[str, str] | str | None:
         """获取指定分片或所有转写结果"""
         if segment_id is None:
-            return self.transcripts
+            # 转换为字符串键以适应 JSON 序列化
+            str_transcripts = {}
+            for seg_id, text in self.transcripts.items():
+                str_transcripts[str(seg_id)] = text
+            return str_transcripts
         return self.transcripts.get(segment_id, None)
 
     def is_processing_complete(self) -> bool:
