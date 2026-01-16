@@ -43,7 +43,17 @@ def index():
 
 @app.errorhandler(413)
 def too_large(e):
-    return jsonify({'error': 'File is too large (max 500MB)'}), 413
+    max_size_mb = app.config['MAX_CONTENT_LENGTH'] / (1024 * 1024)
+    return jsonify({'error': f'File is too large (max {max_size_mb:.0f}MB)'}), 413
+
+@app.route('/api/config')
+def get_config():
+    """获取服务器配置信息"""
+    max_size_mb = app.config['MAX_CONTENT_LENGTH'] / (1024 * 1024)
+    return jsonify({
+        'max_size_mb': max_size_mb,
+        'max_size_bytes': app.config['MAX_CONTENT_LENGTH']
+    })
 
 @app.route('/upload', methods=['POST'])
 def upload_video():
@@ -65,8 +75,9 @@ def upload_video():
     file.seek(0)
 
     if file_length > app.config['MAX_CONTENT_LENGTH']:
+        max_size_mb = app.config['MAX_CONTENT_LENGTH'] / (1024 * 1024)
         return jsonify({
-            'error': f'File is too large. Maximum allowed size is 500MB, file is {file_length / (1024*1024):.2f}MB'
+            'error': f'File is too large. Maximum allowed size is {max_size_mb:.0f}MB, file is {file_length / (1024*1024):.2f}MB'
         }), 413
 
     # 彻底清理之前的所有任务数据

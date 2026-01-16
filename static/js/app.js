@@ -9,9 +9,27 @@ document.addEventListener('DOMContentLoaded', () => {
     let isFirstTranscriptReceived = false;
     let updateInterval = null; // 用于定期更新转录结果
     let videoLoaded = false; // 视频是否已加载
+    let maxFileSizeMB = 500; // 默认值，会在页面加载时更新
+    let maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
 
     // 初始化时禁用播放按钮
     playPauseBtn.disabled = true;
+
+    // 获取服务器配置信息
+    async function fetchServerConfig() {
+        try {
+            const response = await fetch('/api/config');
+            const config = await response.json();
+            maxFileSizeMB = config.max_size_mb;
+            maxFileSizeBytes = config.max_size_bytes;
+            console.log(`服务器配置：最大文件大小 ${maxFileSizeMB}MB`);
+        } catch (error) {
+            console.error('无法获取服务器配置，使用默认最大文件大小', error);
+        }
+    }
+
+    // 页面加载时获取配置
+    fetchServerConfig();
 
     // 上传视频
     videoUpload.addEventListener('change', async (e) => {
@@ -78,10 +96,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     async function uploadFile(file) {
-        // 先检查文件大小（500MB）
-        const maxSize = 500 * 1024 * 1024; // 500MB
-        if (file.size > maxSize) {
-            alert(`文件太大，请上传小于500MB的视频。当前文件大小：${(file.size / (1024*1024)).toFixed(2)}MB`);
+        // 先检查文件大小（使用从服务器获取的配置）
+        if (file.size > maxFileSizeBytes) {
+            alert(`文件太大，请上传小于${maxFileSizeMB.toFixed(0)}MB的视频。当前文件大小：${(file.size / (1024*1024)).toFixed(2)}MB`);
             transcriptContainer.innerHTML = '上传出错：文件太大';
             // 重置文件输入，允许用户重新选择文件
             videoUpload.value = '';
