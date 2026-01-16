@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let transcripts = {};
     let isFirstTranscriptReceived = false;
+    let updateInterval = null; // 用于定期更新转录结果
 
     // 上传视频
     videoUpload.addEventListener('change', async (e) => {
@@ -21,9 +22,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (videoPlayer.paused) {
             videoPlayer.play();
             playPauseBtn.innerHTML = '⏸ 暂停';
+            // 开始播放后，定期检查新的转录结果
+            startUpdatingTranscripts();
         } else {
             videoPlayer.pause();
             playPauseBtn.innerHTML = '▶ 播放';
+            // 暂停时停止检查
+            stopUpdatingTranscripts();
         }
     });
 
@@ -62,14 +67,32 @@ document.addEventListener('DOMContentLoaded', () => {
         videoPlayer.load();
     }
 
+    function startUpdatingTranscripts() {
+        // 定期检查新的转录结果，每 2 秒检查一次
+        if (updateInterval) return;
+        updateInterval = setInterval(checkTranscriptProgress, 2000);
+        console.log('开始定期检查新的转录结果');
+    }
+
+    function stopUpdatingTranscripts() {
+        if (updateInterval) {
+            clearInterval(updateInterval);
+            updateInterval = null;
+            console.log('停止定期检查新的转录结果');
+        }
+    }
+
     async function checkTranscriptProgress() {
         const response = await fetch('/api/transcript');
         const result = await response.json();
+        const resultCount = Object.keys(result).length;
+        const currentCount = Object.keys(transcripts).length;
 
         console.log('从后端收到的转写结果:', result);
-        console.log('转写片段数量:', Object.keys(result).length);
+        console.log('转写片段数量:', resultCount);
 
-        if (Object.keys(result).length > 0) {
+        // 只有当收到的结果比当前多时才更新
+        if (resultCount > currentCount) {
             // 将字符串键转换为整数，确保正确的映射
             const formattedTranscripts = {};
             for (const key in result) {
@@ -86,7 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('格式化后的转写结果:', transcripts);
             console.log('已准备好的片段:', Object.keys(transcripts));
         } else {
-            await new Promise(resolve => setTimeout(resolve, 500));
+            console.log('没有新的转录结果');
         }
     }
 
@@ -119,6 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
         isFirstTranscriptReceived = false;
         transcripts = {};
         transcriptContainer.innerHTML = '';
+        stopUpdatingTranscripts(); // 停止检查
     }
 
     // 页面刷新前清理
