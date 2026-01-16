@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频转写服务</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <video id="videoPlayer" muted>
+            <source id="videoSource" src="" type="video/mp4">
+        </video>
+
+        <input type="file" id="videoUpload" accept="video/*" class="upload-btn">
+        <button id="playPauseBtn" class="play-pause-btn">▶ 播放</button>
+
+        <div id="transcriptContainer" class="transcript-container"></div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
