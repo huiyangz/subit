@@ -35,9 +35,8 @@ def run_transcription_task(video_path: Path, video_id: str) -> None:
     state = get_state_manager()
 
     try:
-        # Load ASR model
+        # Get ASR model (already loaded at startup)
         asr_model = get_asr_model()
-        asr_model.load_model()
 
         # Extract audio and split into chunks
         chunks, duration = process_video_audio(video_path)
@@ -203,7 +202,18 @@ def uploaded_file(filename):
     return send_from_directory(config.UPLOAD_FOLDER, filename)
 
 
+def initialize_model():
+    """Load ASR model at startup."""
+    print("Loading ASR model...")
+    asr_model = get_asr_model()
+    asr_model.load_model()
+    print("ASR model loaded successfully!")
+
+
 if __name__ == "__main__":
+    # Load model before starting the server
+    initialize_model()
+
     app.run(
         host=config.FLASK_HOST,
         port=config.FLASK_PORT,

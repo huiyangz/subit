@@ -6,7 +6,7 @@ Models are downloaded from ModelScope with local caching.
 
 import threading
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional
 import numpy as np
 
 from modelscope import snapshot_download
@@ -36,36 +36,34 @@ class ASRModel:
                 return
 
             self.model_path: Optional[Path] = None
-            self.pipeline = None
+            self.model = None
             self._initialized = True
 
     def load_model(self) -> None:
-        """Load the ASR model from ModelScope or use cached version."""
+        """Load ASR model using Model.from_pretrained."""
         with self._lock:
-            if self.pipeline is not None:
+            if self.model is not None:
                 return
 
-            # Download model from ModelScope (uses cache if available)
-            self.model_path = Path(
-                snapshot_download(
-                    config.MODEL_ID,
-                    cache_dir=str(config.MODEL_CACHE_DIR),
-                    revision="master",
-                )
-            )
-
-            # Import mlx-audio-plus for inference
             try:
-                from mlx_audio_plus import ASRPipeline
+                from mlx_audio.stt.models.funasr import Model
 
-                self.pipeline = ASRPipeline(
-                    str(self.model_path),
-                    batch_size=1,
+                # Download model from ModelScope (uses cache if available)
+                self.model_path = Path(
+                    snapshot_download(
+                        config.MODEL_ID,
+                        cache_dir=str(config.MODEL_CACHE_DIR),
+                        revision="master",
+                    )
                 )
-            except ImportError:
+
+                # Load model from local path
+                self.model = Model.from_pretrained(str(self.model_path))
+            except ImportError as e:
                 raise ImportError(
-                    "mlx-audio-plus is not installed. "
-                    "Please install it using: uv pip install mlx-audio-plus"
+                    f"mlx_audio is not installed. "
+                    f"Please install it using: uv pip install mlx-audio-plus"
+                    f"\nOriginal error: {e}"
                 )
 
     def transcribe(
@@ -80,7 +78,7 @@ class ASRModel:
         Returns:
             Transcribed text string
         """
-        if self.pipeline is None:
+        if self.model is None:
             self.load_model()
 
         # Ensure audio is float32 and normalize
@@ -100,7 +98,7 @@ class ASRModel:
             )
 
         # Run inference
-        result = self.pipeline.generate(audio_data)
+        result = self.model.generate(audio_data)
 
         # Extract text from result
         if isinstance(result, dict):
@@ -117,7 +115,7 @@ class ASRModel:
     def cleanup(self) -> None:
         """Clean up model resources."""
         with self._lock:
-            self.pipeline = None
+            self.model = None
             self.model_path = None
 
 
