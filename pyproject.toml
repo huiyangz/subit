@@ -1,0 +1,12 @@
+[project]
+name = "subit"
+version = "0.1.0"
+description = "Video speech transcription service using ASR"
+requires-python = ">=3.9"
+
+[tool.pip]
+index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+extra-index-url = ["https://pypi.org/simple"]
+
+[tool.uv]
+dev-dependencies = []

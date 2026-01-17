@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subit - Video Speech Transcription</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <input type="file" id="upload-input" accept="video/*" style="display: none;">
+        <button id="upload-btn" class="upload-btn" title="上传视频">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+        </button>
+
+        <div class="video-container">
+            <video id="video-player" playsinline></video>
+        </div>
+
+        <div class="subtitle-area">
+            <span id="subtitle-text"></span>
+        </div>
+
+        <div class="status-bar">
+            <span id="status-text">准备上传视频</span>
+            <span id="progress-text" style="display: none;">0%</span>
+        </div>
+
+        <div class="controls">
+            <button id="play-pause-btn" class="play-pause-btn" disabled>
+                <svg id="play-icon" width="48" height="48" viewBox="0 0 24 24" fill="currentColor">
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                <svg id="="pause-icon" width="48" height="48" viewBox="0 0 24 24" fill="currentColor" style="display: none;">
+                    <rect x="6" y="4" width="4" height="16"></rect>
+                    <rect x="14" y="4" width="4" height="16"></rect>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
