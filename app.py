@@ -14,7 +14,12 @@ from werkzeug.utils import secure_filename
 
 import config
 from utils.state_manager import get_state_manager
-from utils.audio_processor import process_video_audio, get_audio_duration
+from utils.audio_processor import (
+    process_video_audio,
+    get_audio_duration,
+    stream_audio_chunks,
+    AudioStreamCancelled,
+)
 from utils.asr_model import get_asr_model
 
 app = Flask(__name__)
@@ -32,29 +37,44 @@ def allowed_file(filename: str) -> bool:
 
 def run_transcription_task(video_path: Path, video_id: str) -> None:
     """Run transcription task in background thread."""
+    import traceback
+
     state = get_state_manager()
 
     try:
         # Get ASR model (already loaded at startup)
         asr_model = get_asr_model()
 
-        # Extract audio and split into chunks
-        chunks, duration = process_video_audio(video_path)
+        # Get duration and chunk count (lightweight, doesn't load audio)
+        total_chunks, duration = process_video_audio(video_path)
 
         # Update state with duration and total chunks
         state.set_audio_duration(duration)
-        state.set_total_chunks(len(chunks))
+        state.set_total_chunks(total_chunks)
 
-        # Process each chunk
-        for i, (chunk, start_time, end_time) in enumerate(chunks):
+        # Stream audio chunks and transcribe
+        for i, (chunk, start_time, end_time) in enumerate(
+            stream_audio_chunks(video_path, cancelled_check=state.is_cancelled)
+        ):
+            # Check if task was cancelled
+            if state.is_cancelled():
+                print("Transcription cancelled")
+                return
+
             # Transcribe chunk
             text = asr_model.transcribe(chunk)
 
             # Add transcription to state
             state.add_transcription(i, text.strip(), start_time, end_time)
 
+    except AudioStreamCancelled:
+        print("Transcription cancelled")
     except Exception as e:
-        print(f"Error during transcription: {e}")
+        if state.is_cancelled():
+            print("Transcription cancelled")
+        else:
+            print(f"Error during transcription: {e}")
+            traceback.print_exc()
     finally:
         # Mark task as completed
         state.complete_task()
@@ -71,8 +91,15 @@ def upload_video():
     """Upload a video file."""
     state = get_state_manager()
 
-    # Reset state if there's an existing video
-    state.reset_state()
+    # Cancel any existing transcription task
+    if state.is_processing:
+        state.cancel_task()
+
+        # Wait for the old thread to complete (with longer timeout)
+        # Need to wait for any GPU inference to complete
+        old_thread = state.get_current_thread()
+        if old_thread and old_thread.is_alive():
+            old_thread.join(timeout=10.0)
 
     if "file" not in request.files:
         return jsonify({"success": False, "message": "No file provided"}), 400
@@ -99,6 +126,9 @@ def upload_video():
 
     # Get video duration
     duration = get_audio_duration(save_path)
+
+    # Reset state and clean up old files (except the newly uploaded video)
+    state.reset_state(cleanup_files=True, except_video=save_path)
 
     # Store video info in state
     state.current_video = save_path
@@ -153,6 +183,7 @@ def start_transcription():
         args=(state.current_video, state.video_id),
         daemon=True,
     )
+    state.set_current_thread(thread)
     thread.start()
 
     return jsonify(

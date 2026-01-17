@@ -1,10 +1,9 @@
 """Audio Processor for extracting and splitting audio from video"""
 
 from pathlib import Path
-from typing import List, Tuple
+from typing import Iterator, Tuple, Optional, Callable
 import numpy as np
 import subprocess
-import soundfile as sf
 import logging
 
 import config
@@ -13,8 +12,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+class AudioStreamCancelled(Exception):
+    """Raised when audio streaming is cancelled."""
+    pass
+
+
 def get_audio_duration(video_path: Path) -> float:
-    """Get the duration of audio in a video file using ffprobe.
+    """Get duration of audio in a video file using ffprobe.
 
     Args:
         video_path: Path to the video file
@@ -43,107 +47,154 @@ def get_audio_duration(video_path: Path) -> float:
     return 0.0
 
 
-def extract_audio(video_path: Path, sample_rate: int = config.SAMPLE_RATE) -> Tuple[np.ndarray, int]:
-    """Extract audio from video file.
+def stream_audio_chunks(
+    video_path: Path,
+    sample_rate: int = config.SAMPLE_RATE,
+    chunk_duration: int = config.CHUNK_DURATION,
+    cancelled_check: Optional[Callable[[], bool]] = None,
+) -> Iterator[Tuple[np.ndarray, float, float]]:
+    """Stream audio from video and yield chunks using ffmpeg.
+
+    This uses ffmpeg to extract audio in chunks, avoiding loading the entire
+    audio into memory at once.
 
     Args:
         video_path: Path to the video file
         sample_rate: Target sample rate
-
-    Returns:
-        Tuple of (audio_data as numpy array, sample_rate)
-    """
-    # First try using librosa which can handle many formats
-    try:
-        import librosa
-
-        audio_data, sr = librosa.load(
-            str(video_path), sr=sample_rate, mono=True
-        )
-        return audio_data, sample_rate
-    except Exception as e:
-        logger.warning(f"librosa extraction failed: {e}, trying ffmpeg...")
-
-    # Fallback to using ffmpeg + soundfile
-    temp_audio = config.TEMP_DIR / f"{video_path.stem}_extracted.wav"
-
-    try:
-        # Extract audio using ffmpeg
-        cmd = [
-            "ffmpeg",
-            "-y",  # Overwrite output file
-            "-i",
-            str(video_path),
-            "-vn",  # No video
-            "-acodec",
-            "pcm_s16le",  # 16-bit PCM
-            "-ar",
-            str(sample_rate),
-            "-ac",
-            "1",  # Mono
-            str(temp_audio),
-        ]
-        result = subprocess.run(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
-
-        if result.returncode != 0:
-            raise RuntimeError(f"ffmpeg extraction failed: {result.stderr.decode()}")
-
-        # Load the extracted audio
-        audio_data, sr = sf.read(str(temp_audio))
-        audio_data = audio_data.astype(np.float32)
-
-        # Clean up temp file
-        if temp_audio.exists():
-            temp_audio.unlink()
-
-        return audio_data, sr
-
-    except Exception as e:
-        # Clean up temp file if it exists
-        if temp_audio.exists():
-            temp_audio.unlink()
-        raise RuntimeError(f"Failed to extract audio: {e}")
-
-
-def split_audio(
-    audio_data: np.ndarray,
-    sample_rate: int,
-    chunk_duration: int = config.CHUNK_DURATION,
-) -> List[Tuple[np.ndarray, float, float]]:
-    """Split audio into chunks.
-
-    Args:
-        audio_data: Audio data as numpy array
-        sample_rate: Sample rate of the audio
         chunk_duration: Duration of each chunk in seconds
+        cancelled_check: Optional callback to check if operation iscancelled
 
-    Returns:
-        List of tuples (chunk_data, start_time, end_time)
+    Yields:
+        Tuples of (chunk_data, start_time, end_time)
+
+    Raises:
+        AudioStreamCancelled: If the streaming is cancelled
     """
     chunk_samples = chunk_duration * sample_rate
-    total_samples = len(audio_data)
-    chunks = []
+    bytes_per_sample = 4  # float32
+    chunk_bytes = chunk_samples * bytes_per_sample
 
-    for i in range(0, total_samples, chunk_samples):
-        chunk_end = min(i + chunk_samples, total_samples)
-        chunk = audio_data[i:chunk_end]
+    cmd = [
+        "ffmpeg",
+        "-i",
+        str(video_path),
+        "-vn",  # No video
+        "-sn",  # No subtitles
+        "-dn",  # No
+        "-acodec",
+        "pcm_f32le",  # 32-bit float PCM little-endian
+        "-ar",
+        str(sample_rate),
+        "-ac",
+        "1",  # Mono
+        "-f",
+        "f32le",  # Raw float32 output
+        "-",  # Output to stdout
+    ]
 
-        start_time = i / sample_rate
-        end_time = chunk_end / sample_rate
+    process = None
 
-        chunks.append((chunk, start_time, end_time))
+    try:
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=0,
+        )
 
-    return chunks
+        chunk_index = 0
+        buffer = bytearray()
+
+        while True:
+            # Check if cancelled
+            if cancelled_check and cancelled_check():
+                logger.info("Audio streaming cancelled")
+                raise AudioStreamCancelled("Audio streaming was cancelled")
+
+            # Read chunk bytes with timeout to allow cancellation checks
+            try:
+                import select
+
+                # Use select to check if there's data available
+                readable, _, _ = select.select([process.stdout], [], [], 0.1)
+
+                if not readable:
+                    # No data available, loop again to check cancellation
+                    # Also check if process has ended
+                    if process.poll() is not None:
+                        # Process ended, process remaining buffer
+                        if buffer:
+                            samples = len(buffer) // bytes_per_sample
+                            audio_data = np.frombuffer(buffer, dtype=np.float32)
+                            start_time = chunk_index * chunk_duration
+                            end_time = start_time + (samples / sample_rate)
+                            yield (audio_data, start_time, end_time)
+                        break
+                    continue
+
+                data = process.stdout.read(chunk_bytes)
+
+            except (ImportError, AttributeError):
+                # select not available (Windows), fall back to read
+                data = process.stdout.read(chunk_bytes)
+
+            if not data:
+                # No more data, process remaining buffer
+                if buffer:
+                    samples = len(buffer) // bytes_per_sample
+                    audio_data = np.frombuffer(buffer, dtype=np.float32)
+                    start_time = chunk_index * chunk_duration
+                    end_time = start_time + (samples / sample_rate)
+                    yield (audio_data, start_time, end_time)
+                break
+
+            # Add to buffer
+            buffer.extend(data)
+
+            # While we have enough data for a full chunk, yield it
+            while len(buffer) >= chunk_bytes:
+                chunk_data = buffer[:chunk_bytes]
+                del buffer[:chunk_bytes]
+
+                audio_data = np.frombuffer(chunk_data, dtype=np.float32)
+                start_time = chunk_index * chunk_duration
+                end_time = start_time + chunk_duration
+                yield (audio_data, start_time, end_time)
+                chunk_index += 1
+
+    except AudioStreamCancelled:
+        raise
+    except BrokenPipeError:
+        # Can happen when file is deleted while reading
+        if cancelled_check and cancelled_check():
+            logger.info("Audio streaming cancelled due to file deletion")
+            raise AudioStreamCancelled("Audio streaming was cancelled")
+        else:
+            logger.error(f"Broken pipe error while streaming audio from {video_path}")
+            raise
+    except Exception as e:
+        logger.error(f"Failed to stream audio: {e}")
+        raise
+    finally:
+        # Clean up process if it exists
+        if process is not None:
+            try:
+                if process.poll() is None:
+                    process.terminate()
+                    process.wait(timeout=1.0)
+            except Exception as e:
+                logger.debug(f"Error cleaning up ffmpeg process: {e}")
 
 
 def process_video_audio(
     video_path: Path,
     sample_rate: int = config.SAMPLE_RATE,
     chunk_duration: int = config.CHUNK_DURATION,
-) -> Tuple[List[Tuple[np.ndarray, float, float]], float]:
-    """Extract audio from video and split into chunks.
+) -> Tuple[list, float]:
+    """Get duration and chunk count for a video file.
+
+    This is a lightweight function that only calculates metadata,
+    without actually loading audio data.
 
     Args:
         video_path: Path to the video file
@@ -151,10 +202,8 @@ def process_video_audio(
         chunk_duration: Duration of each chunk in seconds
 
     Returns:
-        Tuple of (list of chunks, total duration)
+        Tuple of (total_chunks, total_duration)
     """
     duration = get_audio_duration(video_path)
-    audio_data, sr = extract_audio(video_path, sample_rate)
-    chunks = split_audio(audio_data, sr, chunk_duration)
-
-    return chunks, duration
+    total_chunks = int(duration / chunk_duration) + 1
+    return total_chunks, duration

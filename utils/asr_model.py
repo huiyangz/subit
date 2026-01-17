@@ -37,6 +37,9 @@ class ASRModel:
 
             self.model_path: Optional[Path] = None
             self.model = None
+            # Lock to ensure only one transcription runs at a time
+            # This prevents MLX Metal GPU command buffer conflicts
+            self._inference_lock = threading.Lock()
             self._initialized = True
 
     def load_model(self) -> None:
@@ -73,49 +76,56 @@ class ASRModel:
 
         Args:
             audio_data: Audio data as numpy array (float32 or int16)
-            sample_rate: Sample rate of the audio data
+            sample_rate: Sample rate of audio data
 
         Returns:
             Transcribed text string
         """
+        # Ensure model is loaded first (outside inference lock to allow concurrent loads)
         if self.model is None:
             self.load_model()
 
-        # Ensure audio is float32 and normalize
-        if audio_data.dtype == np.int16:
-            audio_data = audio_data.astype(np.float32) / 32768.0
-        elif audio_data.dtype != np.float32:
-            audio_data = audio_data.astype(np.float32)
+        # Lock for inference to prevent Metal GPU command buffer conflicts
+        with self._inference_lock:
+            # Check again in case model was unloaded
+            if self.model is None:
+                self.load_model()
 
-        # Resample if needed
-        if sample_rate != config.SAMPLE_RATE:
-            import librosa
+            # Ensure audio is float32 and normalize
+            if audio_data.dtype == np.int16:
+                audio_data = audio_data.astype(np.float32) / 32768.0
+            elif audio_data.dtype != np.float32:
+                audio_data = audio_data.astype(np.float32)
 
-            audio_data = librosa.resample(
-                audio_data,
-                orig_sr=sample_rate,
-                target_sr=config.SAMPLE_RATE,
-            )
+            # Resample if needed
+            if sample_rate != config.SAMPLE_RATE:
+                import librosa
 
-        # Run inference
-        result = self.model.generate(audio_data)
+                audio_data = librosa.resample(
+                    audio_data,
+                    orig_sr=sample_rate,
+                    target_sr=config.SAMPLE_RATE,
+                )
 
-        # Extract text from result
-        # STTOutput object has a 'text' attribute
-        if hasattr(result, "text"):
-            return result.text
-        elif isinstance(result, dict):
-            return result.get("text", "")
-        elif isinstance(result, str):
-            return result
-        elif isinstance(result, list) and len(result) > 0:
-            if hasattr(result[0], "text"):
-                return result[0].text
-            elif isinstance(result[0], dict):
-                return result[0].get("text", "")
-            return str(result[0])
-        else:
-            return str(result)
+            # Run inference
+            result = self.model.generate(audio_data)
+
+            # Extract text from result
+            # STTOutput object has a 'text' attribute
+            if hasattr(result, "text"):
+                return result.text
+            elif isinstance(result, dict):
+                return result.get("text", "")
+            elif isinstance(result, str):
+                return result
+            elif isinstance(result, list) and len(result) > 0:
+                if hasattr(result[0], "text"):
+                    return result[0].text
+                elif isinstance(result[0], dict):
+                    return result[0].get("text", "")
+                return str(result[0])
+            else:
+                return str(result)
 
     def cleanup(self) -> None:
         """Clean up model resources."""
@@ -125,11 +135,11 @@ class ASRModel:
 
 
 def get_asr_model() -> ASRModel:
-    """Get the singleton ASR model instance."""
+    """Get singleton ASR model instance."""
     return ASRModel()
 
 
 def cleanup_asr_model() -> None:
-    """Cleanup the ASR model instance."""
+    """Cleanup ASR model instance."""
     model = get_asr_model()
     model.cleanup()
