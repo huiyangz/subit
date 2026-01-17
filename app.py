@@ -203,6 +203,17 @@ def get_progress():
     return jsonify(progress)
 
 
+@app.route("/config")
+def get_config():
+    """Get client configuration."""
+    return jsonify(
+        {
+            "max_file_size": config.MAX_CONTENT_LENGTH,
+            "max_file_size_mb": config.MAX_CONTENT_LENGTH / 1024 / 1024,
+        }
+    )
+
+
 @app.route("/transcriptions")
 def get_transcriptions():
     """Get all transcriptions."""

@@ -8,6 +8,8 @@ class SubitApp {
         this.isTranscribing = false;
         this.canPlay = false;
         this.currentTime = 0;
+        this.maxFileSize = null;
+        this.maxFileSizeMB = null;
 
         this.videoPlayer = document.getElementById('video-player');
         this.uploadInput = document.getElementById('upload-input');
@@ -23,19 +25,18 @@ class SubitApp {
     }
 
     init() {
-        // Upload button click
+        this.fetchConfig();
+
         this.uploadBtn.addEventListener('click', () => {
             this.uploadInput.click();
         });
 
-        // File input change
         this.uploadInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 this.handleFileUpload(e.target.files[0]);
             }
         });
 
-        // Play/Pause button
         this.playPauseBtn.addEventListener('click', () => {
             if (this.videoPlayer.paused) {
                 this.videoPlayer.play();
@@ -44,27 +45,36 @@ class SubitApp {
             }
         });
 
-        // Video events
         this.videoPlayer.addEventListener('play', () => this.updatePlayPauseButton(true));
         this.videoPlayer.addEventListener('pause', () => this.updatePlayPauseButton(false));
         this.videoPlayer.addEventListener('timeupdate', () => this.handleTimeUpdate());
         this.videoPlayer.addEventListener('ended', () => this.updatePlayPauseButton(false));
     }
 
+    async fetchConfig() {
+        try {
+            const response = await fetch('/config');
+            const config = await response.json();
+            this.maxFileSize = config.max_file_size;
+            this.maxFileSizeMB = config.max_file_size_mb;
+        } catch (error) {
+            console.error('Failed to fetch config:', error);
+            this.maxFileSize = 1000 * 1024 * 1024;
+            this.maxFileSizeMB = 1000;
+        }
+    }
+
     async handleFileUpload(file) {
-        // Reset state before uploading new video
         await this.reset();
 
-        // Check file size (500MB max)
-        const maxSize = 500 * 1024 * 1024;
+        const maxSize = this.maxFileSize || (1000 * 1024 * 1024);
+        const maxSizeMB = this.maxFileSizeMB || 1000;
         if (file.size > maxSize) {
-            const maxSizeMB = (maxSize / 1024 / 1024).toFixed(0);
-            this.updateStatus(`错误: 视频文件过大，最大支持 ${maxSizeMB}MB`, false);
+            this.updateStatus('错误: 视频文件过大，最大支持 ' + maxSizeMB + 'MB', false);
             this.playPauseBtn.disabled = true;
             return;
         }
 
-        // Create form data
         const formData = new FormData();
         formData.append('file', file);
 
@@ -72,28 +82,25 @@ class SubitApp {
         this.progressText.style.display = 'none';
 
         try {
-            // Upload video
             const response = await fetch('/upload', {
                 method: 'POST',
                 body: formData
             });
 
-            // Handle different error responses
             if (!response.ok) {
                 if (response.status === 413) {
-                    throw new Error('视频文件过大，请上传500MB以内的视频');
+                    throw new Error('视频文件过大，请上传' + maxSizeMB + 'MB以内的视频');
                 }
-                // Try to get error message from JSON response
                 try {
                     const errorData = await response.json();
-                    throw new Error(errorData.message || `上传失败 (${response.status})`);
+                    throw new Error(errorData.message || '上传失败 (' + response.status + ')');
                 } catch (e) {
                     if (e instanceof Error) throw e;
-                    throw new Error(`上传失败 (${response.status})`);
+                    throw new Error('上传失败 (' + response.status + ')');
                 }
             }
 
-            const result = { success: false, ...await response.json() };
+            const result = await response.json();
 
             if (!result.success) {
                 throw new Error(result.message || '上传失败');
@@ -102,23 +109,17 @@ class SubitApp {
             this.videoId = result.video_id;
             this.updateStatus('正在转录语音...', true);
 
-            // Load video
-            this.videoPlayer.src = `/uploads/${this.videoId}${this.getExtension(file.name)}`;
+            const ext = file.name.split('.').pop().toLowerCase();
+            this.videoPlayer.src = '/uploads/' + this.videoId + '.' + ext;
             await this.videoPlayer.load();
 
-            // Start transcription
             await this.startTranscription();
 
         } catch (error) {
             console.error('Upload error:', error);
-            this.updateStatus(`错误: ${error.message}`, false);
+            this.updateStatus('错误: ' + error.message, false);
             this.playPauseBtn.disabled = true;
         }
-    }
-
-    getExtension(filename) {
-        const ext = filename.split('.').pop().toLowerCase();
-        return `.${ext}`;
     }
 
     async startTranscription() {
@@ -132,14 +133,14 @@ class SubitApp {
             if (!response.ok) {
                 try {
                     const errorData = await response.json();
-                    throw new Error(errorData.message || `转录启动失败 (${response.status})`);
+                    throw new Error(errorData.message || '转录启动失败 (' + response.status + ')');
                 } catch (e) {
                     if (e instanceof Error) throw e;
-                    throw new Error(`转录启动失败 (${response.status})`);
+                    throw new Error('转录启动失败 (' + response.status + ')');
                 }
             }
 
-            const result = { success: false, ...await response.json() };
+            const result = await response.json();
 
             if (!result.success) {
                 throw new Error(result.message || '转录启动失败');
@@ -150,7 +151,7 @@ class SubitApp {
 
         } catch (error) {
             console.error('Transcription error:', error);
-            this.updateStatus(`错误: ${error.message}`, false);
+            this.updateStatus('错误: ' + error.message, false);
             this.playPauseBtn.disabled = true;
         }
     }
@@ -164,7 +165,6 @@ class SubitApp {
                 this.transcriptions = data.transcriptions;
                 this.updateProgress(data.completed, data.total);
 
-                // Wait for first transcription before enabling play
                 if (this.transcriptions.length > 0 && !this.canPlay) {
                     this.canPlay = true;
                     this.playPauseBtn.disabled = false;
@@ -172,7 +172,6 @@ class SubitApp {
                     this.updateSubtitle(this.currentTime);
                 }
 
-                // Check if transcription is complete
                 if (data.completed >= data.total && data.total > 0) {
                     this.stopPolling();
                     this.updateStatus('转录完成', false);
@@ -230,22 +229,19 @@ class SubitApp {
     updateProgress(completed, total) {
         if (total > 0) {
             const percent = Math.round((completed / total) * 100);
-            this.progressText.textContent = `${percent}%`;
+            this.progressText.textContent = percent + '%';
         }
     }
 
     async reset() {
-        // Stop polling
         this.stopPolling();
 
-        // Reset state
         this.videoId = null;
         this.transcriptions = [];
         this.isTranscribing = false;
         this.canPlay = false;
         this.currentTime = 0;
 
-        // Reset UI
         this.videoPlayer.src = '';
         this.videoPlayer.pause();
         this.subtitleText.textContent = '';
@@ -254,16 +250,14 @@ class SubitApp {
         this.updateStatus('准备上传视频', false);
         this.progressText.style.display = 'none';
 
-        // Reset server state
         try {
-            await fetch('/reset', { method: 'POST' });
+            fetch('/reset', { method: 'POST' });
         } catch (error) {
             console.error('Reset error:', error);
         }
     }
 }
 
-// Initialize app when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     window.subitApp = new SubitApp();
 });
