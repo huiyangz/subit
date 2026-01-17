@@ -101,12 +101,17 @@ class ASRModel:
         result = self.model.generate(audio_data)
 
         # Extract text from result
-        if isinstance(result, dict):
+        # STTOutput object has a 'text' attribute
+        if hasattr(result, "text"):
+            return result.text
+        elif isinstance(result, dict):
             return result.get("text", "")
         elif isinstance(result, str):
             return result
         elif isinstance(result, list) and len(result) > 0:
-            if isinstance(result[0], dict):
+            if hasattr(result[0], "text"):
+                return result[0].text
+            elif isinstance(result[0], dict):
                 return result[0].get("text", "")
             return str(result[0])
         else:
