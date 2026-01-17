@@ -56,7 +56,23 @@ document.addEventListener('DOMContentLoaded', () => {
     // 播放/暂停按钮
     playPauseBtn.addEventListener('click', () => {
         if (videoPlayer.paused) {
-            videoPlayer.play();
+            // 确保视频能播放声音
+            if (videoPlayer.muted) {
+                videoPlayer.muted = false;
+            }
+            // 尝试播放视频，如果失败则处理音频限制
+            try {
+                videoPlayer.play().catch(error => {
+                    console.error('自动播放失败:', error);
+                    // 如果自动播放失败，可能需要用户额外交互才能播放声音
+                    if (error.name === 'NotAllowedError' || error.name === 'NotSupportedError') {
+                        alert('浏览器自动播放策略阻止了视频播放声音。请点击视频区域或播放按钮播放声音。');
+                        videoPlayer.muted = false;
+                    }
+                });
+            } catch (error) {
+                console.error('播放错误:', error);
+            }
             playPauseBtn.innerHTML = '⏸ 暂停';
             // 开始播放后，定期检查新的转录结果并清理其他缓存
             startUpdatingTranscripts();
