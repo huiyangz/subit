@@ -26,7 +26,7 @@ FLASK_PORT = 5000
 FLASK_DEBUG = os.getenv("FLASK_DEBUG", "0") == "1"
 
 # File Upload Configuration
-MAX_CONTENT_LENGTH = 500 * 1024 * 1024  # 500MB
+MAX_CONTENT_LENGTH = 1000 * 1024 * 1024  # 1000MB
 ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
 
 # Polling Configuration

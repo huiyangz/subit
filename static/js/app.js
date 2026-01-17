@@ -52,8 +52,17 @@ class SubitApp {
     }
 
     async handleFileUpload(file) {
-        // Reset state
+        // Reset state before uploading new video
         await this.reset();
+
+        // Check file size (500MB max)
+        const maxSize = 500 * 1024 * 1024;
+        if (file.size > maxSize) {
+            const maxSizeMB = (maxSize / 1024 / 1024).toFixed(0);
+            this.updateStatus(`错误: 视频文件过大，最大支持 ${maxSizeMB}MB`, false);
+            this.playPauseBtn.disabled = true;
+            return;
+        }
 
         // Create form data
         const formData = new FormData();
@@ -68,6 +77,21 @@ class SubitApp {
                 method: 'POST',
                 body: formData
             });
+
+            // Handle different error responses
+            if (!response.ok) {
+                if (response.status === 413) {
+                    throw new Error('视频文件过大，请上传500MB以内的视频');
+                }
+                // Try to get error message from JSON response
+                try {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || `上传失败 (${response.status})`);
+                } catch (e) {
+                    if (e instanceof Error) throw e;
+                    throw new Error(`上传失败 (${response.status})`);
+                }
+            }
 
             const result = { success: false, ...await response.json() };
 
@@ -104,6 +128,16 @@ class SubitApp {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ video_id: this.videoId })
             });
+
+            if (!response.ok) {
+                try {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || `转录启动失败 (${response.status})`);
+                } catch (e) {
+                    if (e instanceof Error) throw e;
+                    throw new Error(`转录启动失败 (${response.status})`);
+                }
+            }
 
             const result = { success: false, ...await response.json() };
 

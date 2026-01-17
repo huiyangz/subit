@@ -141,6 +141,10 @@ html, body {
     opacity: 0.5;
 }
 
+.play-pause-btn svg {
+    display: block;
+}
+
 /* Loading animation */
 @keyframes spin {
     to {

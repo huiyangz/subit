@@ -22,11 +22,11 @@ app = Flask(__name__)
 # Configure Flask
 app.config["MAX_CONTENT_LENGTH"] = config.MAX_CONTENT_LENGTH
 app.config["UPLOAD_FOLDER"] = str(config.UPLOAD_FOLDER)
-app.secret_key = os.getenv("SECRET_KEY", "subit-secret-key-change-in-production")
+app.secret_key = os.getenv("SECRET_KEY", "subsub-secret-key-change-in-production")
 
 
 def allowed_file(filename: str) -> bool:
-    """Check if the file extension is allowed."""
+    """Check if file extension is allowed."""
     return Path(filename).suffix.lower() in config.ALLOWED_VIDEO_EXTENSIONS
 
 
@@ -47,7 +47,7 @@ def run_transcription_task(video_path: Path, video_id: str) -> None:
 
         # Process each chunk
         for i, (chunk, start_time, end_time) in enumerate(chunks):
-            # Transcribe the chunk
+            # Transcribe chunk
             text = asr_model.transcribe(chunk)
 
             # Add transcription to state
@@ -94,7 +94,7 @@ def upload_video():
     safe_filename = f"{video_id}{ext}"
     save_path = config.UPLOAD_FOLDER / safe_filename
 
-    # Save the file
+    # Save file
     file.save(str(save_path))
 
     # Get video duration
@@ -118,7 +118,7 @@ def upload_video():
 
 @app.route("/transcribe", methods=["POST"])
 def start_transcription():
-    """Start transcription for the uploaded video."""
+    """Start transcription for uploaded video."""
     state = get_state_manager()
 
     # Check if a task is already running
