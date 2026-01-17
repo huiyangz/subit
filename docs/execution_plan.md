@@ -231,9 +231,12 @@ FLASK_DEBUG=1
 uv venv
 source .venv/bin/activate
 
-# 配置pip国内源（pyproject.toml中已配置）
+# 安装依赖（使用国内镜像源，任选一种方式）
+# 方式1: 使用 --index-url 参数
+uv pip install -r requirements.txt --index-url https://pypi.tuna.tsinghua.edu.cn/simple
 
-# 安装依赖
+# 方式2: 设置环境变量（推荐，可写入 .env 或 .bashrc）
+export UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 uv pip install -r requirements.txt
 
 # 启动服务
